@@ -1,0 +1,180 @@
+/* eslint-disable no-unused-vars */
+<template>
+  <div class="vue-leaflet">
+    <div class="map">
+      <l-map :zoom="zoom" :center="center" :options="{ zoomControl: false }" ref="myMap">
+        <l-tile-layer :url="url" :attribution="attribution"></l-tile-layer>
+        <l-marker :lat-lng="center" :icon="icon" ref='hereMarker'></l-marker>
+        <v-marker-cluster :options="clusterOptions">
+          <l-geo-json
+            v-for="geoJson in stores"
+            :key="geoJson.id"
+            :geojson="geoJson"
+            :options="geoJsonOptions"></l-geo-json>
+        </v-marker-cluster>
+      </l-map>
+    </div>
+  </div>
+</template>
+
+<script>
+
+import {
+  LMap,
+  LTileLayer,
+  LMarker,
+  LGeoJson
+} from 'vue2-leaflet'
+
+import Vue2LeafletMarkerCluster from 'vue2-leaflet-markercluster'
+import settings from '@/resource/map-settings.json'
+
+const L = window.L
+
+export default {
+  name: 'VueLeaflet',
+  components: {
+    LMap,
+    LTileLayer,
+    LGeoJson,
+    LMarker,
+    'v-marker-cluster': Vue2LeafletMarkerCluster
+  },
+  data () {
+    return {
+      center: L.latLng(settings.center),
+      zoom: settings.zoom,
+      isEmptyHide: false,
+      clusterOptions: {
+        disableClusteringAtZoom: 16
+      },
+      geoJsonOptions: {
+        style: (feature) => {
+
+        },
+        pointToLayer: this.createCustomIcon,
+        onEachFeature: (feature, layer) => {
+          // console.log(feature, layer)
+          layer.bindPopup(this.getPopup(feature.properties))
+        }
+      },
+      icon: L.icon(settings.icon),
+      url: settings.mapURL,
+      attribution: settings.attribute,
+      icons: {
+        grey: this.customIcon('grey'),
+        yellow: this.customIcon('yellow'),
+        green: this.customIcon('green'),
+        red: this.customIcon('red')
+      }
+    }
+  },
+  computed: {
+    stores () { return this.$store.state.stores }
+  },
+  methods: {
+    getPopup (item) {
+      let phone = `(${item.phone.substr(0, 2)}) ${item.phone.substr(4, 4)}-${item.phone.substr(8)}`
+      return `
+        <h3 class="store-title">${item.name}</h3>
+        <div class="store-info">
+          <div><i class="fas fa-phone"></i> <a href="tel:+886-${item.phone.substring(1).replace(' ', '')}">${phone}</a></div>
+          <div><i class="fas fa-directions"></i> <a target="_blank" href="https://www.google.com.tw/maps/place/${item.address}">${item.address}</a></div>
+          <hr>
+          <div>成人口罩: ${item.mask_adult}</div>
+          <div>小孩口罩: ${item.mask_child}</div>
+          <div>更新時間: ${item.updated === '' ? '(不明)' : item.updated}</div>
+        </div>
+      `
+    },
+    customIcon (color) {
+      return L.icon({
+        ...settings.icon,
+        iconUrl: `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`
+      })
+    },
+    createCustomIcon (feature, latlng) {
+      let prop = feature.properties
+      let range = prop.mask_adult + prop.mask_child
+      let icon = this.icons.grey
+
+      if (range > 100) {
+        icon = this.icons.green
+      } else if (range > 50) {
+        icon = this.icons.yellow
+      } else if (range > 0) {
+        icon = this.icons.red
+      }
+
+      return L.marker(latlng, { icon })
+    }
+  },
+  mounted () {
+    this.$store.dispatch('fetchPharmacies')
+
+    this.$nextTick(() => {
+      const map = this.$refs.myMap.mapObject
+      L.control.zoom({ position: 'bottomright' }).addTo(map)
+
+      navigator.geolocation.getCurrentPosition((pos) => {
+        const p = pos.coords
+        this.center = L.latLng(p.latitude, p.longitude)
+
+        this.$refs.hereMarker.mapObject.bindTooltip('You', {
+          offset: [0, -36],
+          permanent: true,
+          direction: 'top'
+        })
+      })
+    })
+  }
+}
+</script>
+
+<style scoped>
+@import "~leaflet.markercluster/dist/MarkerCluster.css";
+@import "~leaflet.markercluster/dist/MarkerCluster.Default.css";
+
+.vue-leaflet {
+  display: block;
+  position: absolute;
+  width: 100%;
+  height: 100%;
+}
+.map-info {
+  display: block;
+  padding: .75em 1.75em;
+  background-color: #fff;
+  border: 1px solid #000;
+  position: absolute;
+  z-index: 10;
+  top: 0;
+  right: 0;
+}
+.map{
+  display: block;
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+}
+
+>>> .store-title {
+  font-size: 1.5em;
+  line-height: 1.7em;
+  font-weight: 900;
+  margin-bottom: 6px;
+  text-align: center;
+}
+
+>>> .store-info {
+  font-size: 1.3em;
+  line-height: 1.5;
+}
+
+>>> .fa-phone, .fa-directions {
+  font-size: 0.85em;
+  font-weight: 600;
+}
+
+</style>
